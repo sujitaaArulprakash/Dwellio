@@ -1,0 +1,24 @@
+{
+  "name": "dwellio-rental-management-system",
+  "version": "1.0.0",
+  "description": "Dwellio (Nestora) – Modern Rental Property Management System (React, Express, MongoDB, JWT)",
+  "scripts": {
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "seed": "npm --prefix server run seed",
+    "install:server": "npm --prefix server install",
+    "install:client": "npm --prefix client install",
+    "install:all": "npm run install:server && npm run install:client"
+  },
+  "keywords": [
+    "rental-management-system",
+    "react",
+    "express",
+    "mongodb",
+    "mongoose",
+    "jwt",
+    "proptech"
+  ],
+  "author": "Dwellio Team",
+  "license": "MIT"
+}
