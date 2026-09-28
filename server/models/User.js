@@ -18,14 +18,26 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: [true, 'Please provide a phone number'],
+      default: '',
       trim: true,
     },
     password: {
       type: String,
-      required: [true, 'Please provide a password'],
+      required: function () {
+        return !this.firebaseUid;
+      },
       minlength: 6,
       select: false,
+    },
+    firebaseUid: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
+    authProvider: {
+      type: String,
+      enum: ['local', 'firebase', 'google'],
+      default: 'local',
     },
     role: {
       type: String,
@@ -50,7 +62,7 @@ const userSchema = new mongoose.Schema(
 
 // Encrypt password before saving
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password) {
     return next();
   }
   const salt = await bcrypt.genSalt(10);

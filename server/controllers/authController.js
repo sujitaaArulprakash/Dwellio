@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { verifyFirebaseIdToken } = require('../utils/firebaseAuth');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'dwellio_default_secret', {
@@ -174,9 +175,97 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+// @desc    Authenticate or register user via Firebase ID Token
+// @route   POST /api/auth/firebase-login
+// @access  Public
+const firebaseLogin = async (req, res, next) => {
+  try {
+    const { idToken, role, name, phone } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ success: false, message: 'Please provide a Firebase ID token' });
+    }
+
+    const fbUser = await verifyFirebaseIdToken(idToken);
+
+    if (!fbUser.email) {
+      return res.status(400).json({ success: false, message: 'Email address is required from Firebase account' });
+    }
+
+    // Check if user already exists by firebaseUid OR email
+    let user = await User.findOne({
+      $or: [{ firebaseUid: fbUser.uid }, { email: fbUser.email }],
+    });
+
+    if (user) {
+      // Check if user account is disabled
+      if (user.status === 'disabled') {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is disabled. Please contact administrator.',
+        });
+      }
+
+      // Link firebaseUid or update profile if needed
+      let updated = false;
+      if (!user.firebaseUid) {
+        user.firebaseUid = fbUser.uid;
+        updated = true;
+      }
+      if (!user.authProvider || user.authProvider === 'local') {
+        user.authProvider = fbUser.providerId;
+        updated = true;
+      }
+      if (!user.profileImage && fbUser.profileImage) {
+        user.profileImage = fbUser.profileImage;
+        updated = true;
+      }
+      if (updated) {
+        await user.save();
+      }
+    } else {
+      // New user registering via Firebase
+      const assignedRole = role === 'owner' ? 'owner' : 'tenant';
+      const displayName = name || fbUser.name || fbUser.email.split('@')[0];
+
+      user = await User.create({
+        name: displayName,
+        email: fbUser.email,
+        phone: phone || '',
+        role: assignedRole,
+        firebaseUid: fbUser.uid,
+        authProvider: fbUser.providerId,
+        profileImage: fbUser.profileImage || '',
+        status: 'active',
+      });
+    }
+
+    const token = generateToken(user._id);
+
+    res.json({
+      success: true,
+      message: 'Authentication successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        profileImage: user.profileImage,
+        status: user.status,
+        authProvider: user.authProvider,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
+  firebaseLogin,
   getMe,
   updateProfile,
 };

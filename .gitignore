@@ -6,3 +6,5 @@ server/.env
 
 node_modules/
 .env
+client/dist/
+dist/
