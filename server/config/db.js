@@ -11,16 +11,29 @@ if (dns && typeof dns.setServers === 'function') {
   }
 }
 
+// Cached connection promise across serverless function invocations
+let cachedPromise = null;
+
 /**
  * Connects to MongoDB (Local or MongoDB Atlas) using MONGO_URI from environment variables.
- * Automatically sanitizes connection string to prevent leaking credentials in terminal or logs.
+ * Automatically caches connection in serverless environments to prevent reconnecting on every request.
  */
 const connectDB = async () => {
+  // Reuse existing connection if already connected (1) or connecting (2)
+  if (mongoose.connection.readyState >= 1) {
+    return mongoose.connection;
+  }
+
+  // Reuse in-flight connection promise to avoid duplicate concurrent connections
+  if (cachedPromise) {
+    return cachedPromise;
+  }
+
   const mongoUri = process.env.MONGO_URI;
 
   if (!mongoUri) {
     console.error('MongoDB Connection Error: MONGO_URI is not defined in environment variables.');
-    process.exit(1);
+    return;
   }
 
   // Detect if user has not yet replaced the placeholder in .env
@@ -31,14 +44,18 @@ const connectDB = async () => {
   }
 
   try {
-    const conn = await mongoose.connect(mongoUri, {
+    cachedPromise = mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 10000,
     });
+
+    const conn = await cachedPromise;
 
     console.log(`✅ MongoDB Atlas Connected successfully!`);
     console.log(`   Host: ${conn.connection.host}`);
     console.log(`   Database: ${conn.connection.name}`);
+    return conn;
   } catch (error) {
+    cachedPromise = null;
     console.error(`❌ MongoDB Connection Failed: ${error.message}`);
     if (
       error.name === 'MongoServerSelectionError' ||
@@ -58,6 +75,7 @@ const connectDB = async () => {
 
 // Global connection event listeners
 mongoose.connection.on('disconnected', () => {
+  cachedPromise = null;
   console.warn('⚠️  MongoDB connection closed/disconnected.');
 });
 

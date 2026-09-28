@@ -8,7 +8,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB
+// Initiate database connection
 connectDB();
 
 const app = express();
@@ -17,6 +17,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Ensure database connection is active before processing requests (critical for serverless cold starts)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -45,6 +55,12 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Dwellio Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-});
+// Only start local listener when running outside Vercel serverless environment
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Dwellio Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  });
+}
+
+// Export Express app for Vercel Serverless Functions
+module.exports = app;
